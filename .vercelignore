@@ -1,0 +1,22 @@
+# 🧪 Local environment & secret config
+.env
+.env.local
+.env.production
+
+# 📦 Dependencies (already handled by Vercel)
+node_modules
+
+# 🧹 Local editor and OS clutter
+.DS_Store
+.vscode/
+*.log
+
+# 🚫 Build artifacts and Vercel state
+.vercel/
+.next/
+out/
+*.map
+
+# 🔧 Local-only scripts/utilities
+verify-project.js
+README.md
