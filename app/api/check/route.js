@@ -2,9 +2,7 @@ import axios from 'axios';
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const EXPECTED_REDIRECT = 'https://t.ly/pang555';
-
-const linkCache = new Map();
+const EXPECTED_REDIRECT = 't.ly/pang555';
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
@@ -16,63 +14,45 @@ export async function GET(req) {
   }
 
   try {
-    // Use axios instead of fetch for full redirect info
-    const res = await axios.head(target, {
-      maxRedirects: 0,
-      validateStatus: null, // allow non-2xx statuses
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(target, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     const status = res.status;
     const isRedirect = status >= 300 && status < 400;
     const isOK = status >= 200 && status < 300;
-    const redirectedTo = isRedirect ? res.headers.location || null : null;
-
-    const label = isRedirect ? 'redirect' : String(status);
-    const cacheKey = target;
-    const last = linkCache.get(cacheKey);
-    const isNew = !last;
+    const redirectedTo = res.headers.get('location');
 
     const response = {
-      status: label,
+      status: isRedirect ? 'redirect' : String(status),
       code: status,
       target,
-      redirectedTo,
+      redirectedTo: isRedirect ? redirectedTo : null,
       time: timestamp,
     };
 
-    const hasChanged =
-      isNew || last.status !== label || last.redirectedTo !== redirectedTo;
-
-    if (hasChanged) {
-      linkCache.set(cacheKey, { status: label, redirectedTo });
-
-      let text = isNew
-        ? `🆕 *New Link Added*\n🔗 ${target}\n📦 Status: ${label}` +
-          (redirectedTo ? `\n➡️ Redirects to: ${redirectedTo}` : '') +
-          `\n🕒 ${timestamp}`
-        : [
-            `📡 *Link Status Update*`,
-            `🔗 ${target}`,
-            `📦 Status: ${label}`,
-            redirectedTo ? `➡️ Redirects to: ${redirectedTo}` : '',
-            `🕒 ${timestamp}`,
-          ]
-            .filter(Boolean)
-            .join('\n');
-
-      if (isRedirect && redirectedTo && !redirectedTo.includes(EXPECTED_REDIRECT)) {
-        text = `🚨 *REDIRECT MISMATCH*` +
-               `\n🔗 ${target}` +
-               `\n➡️ Went to: ${redirectedTo}` +
-               `\n❌ Expected: ${EXPECTED_REDIRECT}` +
-               `\n🕒 ${timestamp}`;
-      }
-
+    if (isRedirect && redirectedTo && !redirectedTo.includes(EXPECTED_REDIRECT)) {
       await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
         chat_id: CHAT_ID,
-        text,
+        text: `🚨 *Redirect Mismatch* 🔗\n${target}\n➡️ *Redirected to:* ${redirectedTo}\n❌ *Expected:* ${EXPECTED_REDIRECT}\n🕒 ${timestamp}`,
         parse_mode: 'Markdown',
-        disable_web_page_preview: false,
+        disable_web_page_preview: true,
+      });
+    }
+
+    if (!isOK && !isRedirect) {
+      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        chat_id: CHAT_ID,
+        text: `🚨 *Redirect Check Failed*\n🔗 ${target}\n❌ Status: ${status}\n🕒 ${timestamp}`,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
       });
     }
 
