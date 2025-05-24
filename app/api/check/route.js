@@ -2,9 +2,9 @@ import axios from 'axios';
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const EXPECTED_REDIRECT = 'https://t.ly/pang555'; // 🎯 Your expected redirect
+const EXPECTED_REDIRECT = 'https://t.ly/pang555';
 
-const linkCache = new Map(); // 🧠 Simple memory cache
+const linkCache = new Map();
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
@@ -16,21 +16,16 @@ export async function GET(req) {
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
-    const res = await fetch(target, {
-      method: 'GET',
-      redirect: 'manual',
-      signal: controller.signal,
+    // Use axios instead of fetch for full redirect info
+    const res = await axios.head(target, {
+      maxRedirects: 0,
+      validateStatus: null, // allow non-2xx statuses
     });
-
-    clearTimeout(timeout);
 
     const status = res.status;
     const isRedirect = status >= 300 && status < 400;
     const isOK = status >= 200 && status < 300;
-    const redirectedTo = res.headers.get('location') || null;
+    const redirectedTo = isRedirect ? res.headers.location || null : null;
 
     const label = isRedirect ? 'redirect' : String(status);
     const cacheKey = target;
@@ -65,7 +60,6 @@ export async function GET(req) {
             .filter(Boolean)
             .join('\n');
 
-      // 🚨 Redirect mismatch warning
       if (isRedirect && redirectedTo && !redirectedTo.includes(EXPECTED_REDIRECT)) {
         text = `🚨 *REDIRECT MISMATCH*` +
                `\n🔗 ${target}` +
