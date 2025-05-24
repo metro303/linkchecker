@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const EXPECTED_REDIRECT = 't.ly/pang555';
+const EXPECTED_REDIRECT = 'https://t.ly/pang555';
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
@@ -26,11 +26,11 @@ export async function GET(req) {
     clearTimeout(timeout);
 
     const status = res.status;
+    const redirectedTo = res.headers.get('location');
     const isRedirect = status >= 300 && status < 400;
     const isOK = status >= 200 && status < 300;
-    const redirectedTo = res.headers.get('location');
 
-    const response = {
+    const result = {
       status: isRedirect ? 'redirect' : String(status),
       code: status,
       target,
@@ -38,10 +38,10 @@ export async function GET(req) {
       time: timestamp,
     };
 
-    if (isRedirect && redirectedTo && !redirectedTo.includes(EXPECTED_REDIRECT)) {
+    if (isRedirect && redirectedTo !== EXPECTED_REDIRECT) {
       await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
         chat_id: CHAT_ID,
-        text: `🚨 *Redirect Mismatch* 🔗\n${target}\n➡️ *Redirected to:* ${redirectedTo}\n❌ *Expected:* ${EXPECTED_REDIRECT}\n🕒 ${timestamp}`,
+        text: `⚠️ *Unexpected Redirect*\n🔗 ${target}\n↪️ ${redirectedTo}\n🕒 ${timestamp}`,
         parse_mode: 'Markdown',
         disable_web_page_preview: true,
       });
@@ -56,7 +56,15 @@ export async function GET(req) {
       });
     }
 
-    return Response.json(response);
+    // Alert on new URL checked regardless of result
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      chat_id: CHAT_ID,
+      text: `🆕 *URL Checked*\n🔗 ${target}\n↪️ ${redirectedTo || 'No redirect'}\n🕒 ${timestamp}`,
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true,
+    });
+
+    return Response.json(result);
   } catch (err) {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       chat_id: CHAT_ID,
