@@ -14,16 +14,10 @@ export async function GET(req) {
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
     const res = await fetch(target, {
-      method: 'GET',
+      method: 'HEAD',
       redirect: 'manual',
-      signal: controller.signal,
     });
-
-    clearTimeout(timeout);
 
     const status = res.status;
     const redirectedTo = res.headers.get('location');
@@ -38,15 +32,6 @@ export async function GET(req) {
       time: timestamp,
     };
 
-    if (isRedirect && redirectedTo !== EXPECTED_REDIRECT) {
-      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        chat_id: CHAT_ID,
-        text: `⚠️ *Unexpected Redirect*\n🔗 ${target}\n↪️ ${redirectedTo}\n🕒 ${timestamp}`,
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true,
-      });
-    }
-
     if (!isOK && !isRedirect) {
       await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
         chat_id: CHAT_ID,
@@ -54,15 +39,14 @@ export async function GET(req) {
         parse_mode: 'Markdown',
         disable_web_page_preview: true,
       });
+    } else if (isRedirect && redirectedTo !== EXPECTED_REDIRECT) {
+      await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        chat_id: CHAT_ID,
+        text: `⚠️ *Unexpected Redirect*\n🔗 ${target}\n↪️ ${redirectedTo}\n🕒 ${timestamp}`,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      });
     }
-
-    // Alert on new URL checked regardless of result
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      chat_id: CHAT_ID,
-      text: `🆕 *URL Checked*\n🔗 ${target}\n↪️ ${redirectedTo || 'No redirect'}\n🕒 ${timestamp}`,
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true,
-    });
 
     return Response.json(result);
   } catch (err) {
